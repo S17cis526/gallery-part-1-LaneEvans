@@ -6,10 +6,13 @@
  * simple photo gallery web app.
  */
 
-var http = require('http'); //Http library
-var fs = require('fs'); //Library to access Filesystem
-var port = 3433; //Listening port
-var stylesheet = fs.readFileSync('gallery.css'); //Load in css stylesheet
+var http = require('http'); // http library
+var fs = require('fs'); // Library to access Filesystem
+var url = require('url');
+var port = 3165; // Listening on port
+var defaultConfig = {title: 'Gallery'}
+var config = JSON.parse(fs.readFileSync('config.json') || defaultConfig);
+var stylesheet = fs.readFileSync('gallery.css'); // Loads in css stylesheet
 var imageNames = ['ace.jpg', 'bubble.jpg', 'fern.jpg', 'chess.jpg', 'mobile.jpg']; //Array of the images
 
 
@@ -42,18 +45,25 @@ function serveGallery(req, res){
 		res.setHeader('Content-Type', 'text/html');
 		res.end(buildGallery(imageNames));
 	});
-
 }
 
 function buildGallery(imageTags){
 	var html = '<!doctype html>';
 	html += '<head>';
-	html += ' <title>Gallery</title>';
+	html += ' <title>' + config.title + '</title>';
 	html += ' <link href="gallery.css" rel="stylesheet" type="text/css"/>';
 	html += '</head>';
 	html += '<body>';
-	html += ' <h1>Gallery</h1>';
+	html += ' <h1>' + config.title + '</h1>';
+	html += ' <form>';
+	html += '  <input type="text" name="title">';
+	html += '  <input type="submit" value="Change Gallery Title">';
+	html += ' </form>';
 	html +=   imageNamesToTags(imageTags).join('');
+	html += ' <form action="" method="POST" enctype="multipart/form-data">';
+	html += '  <input type="file" name="image">';
+	html += '  <input type="submit" value="Upload Image">';
+	html += ' </form>';
 	html += ' <h1>Hello.</h1> Time is ' + Date.now();
 	html += '</body>';
 	return html;
@@ -71,15 +81,51 @@ function serveImage(filename, req, res){
 		res.setHeader("Content-Type", "image/jpeg");
 		res.end(body);
 	});
-
 	}
 
-//Creates a server
+	function uploadImage(req, res) {
+		var body = ''; // Buffer for the image
+		req.on('error', function(){
+			res.statusCode = 500;
+			res.end();
+		});
+		req.on('data', function(data){
+			body += data;
+		});
+		req.on('end', function(){
+			fs.writeFile('filename', body, function(err){
+				if(err)
+					console.error(err);
+					res.statusCode = 500;
+					res.end();
+					return;
+				}
+				serveGalley(req, res);
+			});
+		});
+	}
+
+// Creates a server
 var server = http.createServer(function(req, res){
-	switch(req.url){
+	var urlParts = url.parse(req.url);
+
+	if(urlParts.query) {
+		var matches = /title=(.+)(&|$)/.exec(urlParts.query) // Regular Expression
+		if (matches && matches[1]) {
+			config.title = decodeURIComponent(matches[1]);
+			fs.writeFile('config.json', JSON.stringify(config));
+		}
+	}
+
+
+	switch(urlParts.pathname){
 		case "/":
     case "/gallery":
-		serveGallery(req, res);
+			if(req.method == 'GET') {
+				serveGallery(req, res);
+			} else if (req.method =='POST') {
+				uploadPicture(req, res);
+			}
       break;
     case '/gallery.css':
       res.setHeader('Content-Type', 'text/css');
@@ -91,7 +137,7 @@ var server = http.createServer(function(req, res){
 	}
 });
 
-//Server is listening on port
+// Server is listening on port
 server.listen(port, function(){
 	console.log("Listening on Port: " + port);
 });
