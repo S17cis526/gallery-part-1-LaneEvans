@@ -95,6 +95,7 @@ function serveImage(filename, req, res){
 		req.on('end', function(){
 			fs.writeFile('filename', body, function(err){
 				if(err)
+				{
 					console.error(err);
 					res.statusCode = 500;
 					res.end();
